@@ -6,6 +6,7 @@ import CardComponent from './components/CardComponent';
 import LifeArea from './components/LifeArea';
 import JinkiCard from './components/JinkiCard';
 import BloodPool from './components/BloodPool';
+import { useTranslation } from 'react-i18next';
 
 
 const shuffle = <T,>(array: T[]) => [...array].sort(() => Math.random() - 0.5);
@@ -315,6 +316,7 @@ const gameReducer = (state: GameState, action: Action): GameState => {
 const App: React.FC = () => {
   const [state, dispatch] = useReducer(gameReducer, {} as GameState);
   const [cpuThinking, setCpuThinking] = useState(false);
+  const { t, i18n } = useTranslation();
 
   useEffect(() => {
     dispatch({ type: 'INIT_GAME' });
@@ -330,6 +332,11 @@ const App: React.FC = () => {
 
   // --- CPU Logic ---
   const activePlayer = state.players ? state.players[state.activePlayerIndex] : null;
+
+  const toggleLanguage = () => {
+    const nextLng = i18n.language === 'en' ? 'ja' : 'en';
+    i18n.changeLanguage(nextLng);
+  };
 
   useEffect(() => {
     if (!activePlayer || !activePlayer.isCpu || state.phase !== Phase.MAIN || state.winnerId) return;
@@ -406,14 +413,20 @@ const App: React.FC = () => {
       {/* --- Header / Status Bar --- */}
       <div className="flex justify-between items-center px-4 py-2 bg-black/60 border-b border-white/10 h-12 shrink-0">
         <h1 className="text-red-600 font-cinzel font-bold text-xl tracking-widest">BLOOD RECALL</h1>
+        <button 
+          onClick={toggleLanguage}
+          className="ml-4 px-2 py-1 bg-gray-800 border border-gray-600 rounded text-xs text-white hover:bg-gray-700"
+        >
+          {i18n.language === 'en' ? '日本語' : 'English'}
+        </button>
         <div className="flex gap-4 text-sm text-gray-300 font-mono">
-            <span className={state.phase === Phase.MAIN ? 'text-white font-bold' : 'opacity-50'}>MAIN</span>
+            <span className={state.phase === Phase.MAIN ? 'text-white font-bold' : 'opacity-50'}>{t('phases.main')}</span>
             <span>&gt;</span>
-            <span className={state.phase === Phase.BATTLE ? 'text-red-500 font-bold animate-pulse' : 'opacity-50'}>BATTLE</span>
+            <span className={state.phase === Phase.BATTLE ? 'text-red-500 font-bold animate-pulse' : 'opacity-50'}>{t('phases.battle')}</span>
             <span>&gt;</span>
-            <span className={state.phase === Phase.CLEANUP ? 'text-blue-400 font-bold' : 'opacity-50'}>CLEANUP</span>
+            <span className={state.phase === Phase.CLEANUP ? 'text-blue-400 font-bold' : 'opacity-50'}>{t('phases.cleanup')}</span>
         </div>
-        <div className="text-xs text-gray-500">Turn {state.turnCount}</div>
+        <div className="text-xs text-gray-500">{t('ui.turn', { count: state.turnCount })}</div>
       </div>
 
       {/* --- Game Area --- */}
@@ -421,7 +434,7 @@ const App: React.FC = () => {
         
         {/* --- Left: Game Log (Desktop) --- */}
         <div className="hidden lg:block w-64 bg-black/40 border-r border-white/10 p-4 overflow-y-auto shrink-0 font-mono text-xs">
-            <h3 className="text-gray-500 mb-2 border-b border-gray-700">BATTLE LOG</h3>
+            <h3 className="text-gray-500 mb-2 border-b border-gray-700">{t('ui.battleLog')}</h3>
             <div ref={logRef} className="space-y-1 h-full overflow-y-auto pb-20">
                 {state.log.map((l, i) => (
                     <div key={i} className="text-gray-300 break-words"><span className="text-red-900 mr-1">➤</span>{l}</div>
@@ -463,7 +476,7 @@ const App: React.FC = () => {
 
             {/* Market / Center Strip */}
             <div className="h-48 bg-black/30 border-y border-white/10 flex items-center justify-center relative">
-                <div className="absolute left-2 top-2 text-xs text-yellow-600 font-cinzel tracking-widest">COVENANT AREA (MARKET)</div>
+                <div className="absolute left-2 top-2 text-xs text-yellow-600 font-cinzel tracking-widest">{t('ui.covenantArea')}</div>
                 <div className="flex gap-3 px-4 overflow-x-auto max-w-full items-center h-full scrollbar-hide">
                     {state.market.map((card, i) => (
                         <CardComponent 
@@ -477,7 +490,7 @@ const App: React.FC = () => {
                             }}
                         />
                     ))}
-                     {state.market.length === 0 && <div className="text-gray-500 text-sm italic">Market Empty</div>}
+                     {state.market.length === 0 && <div className="text-gray-500 text-sm italic">{t('ui.marketEmpty')}</div>}
                 </div>
                 
                 {/* Central Status Overlay */}
@@ -529,20 +542,19 @@ const App: React.FC = () => {
 
                         <div className="flex justify-between items-center bg-black/50 p-2 rounded">
                             <div className="text-xs text-gray-400">
-                                Actions: {human.actionsTaken}/{human.jinki.bloodSuccession} <br/>
-                                Total Attack: <span className="text-red-400 font-bold">{human.field.reduce((a,c) => a+c.attack, 0)}</span>
-                            </div>
+                               {t('ui.actions', { current: human.actionsTaken, max: human.jinki.bloodSuccession })} <br/>
+          {t('ui.totalAttack')} <span className="text-red-400 font-bold">...</span></div>
                             
                             {isHumanTurn ? (
                                 <button 
                                     onClick={() => dispatch({ type: 'PASS_PHASE', playerId: human.id })}
                                     className="px-6 py-2 bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white font-bold rounded text-sm shadow-lg active:translate-y-1"
                                 >
-                                    END MAIN PHASE
+                                   {t('ui.endMainPhase')}
                                 </button>
                             ) : (
                                 <div className="text-yellow-500 text-sm animate-pulse font-bold">
-                                    {state.phase === Phase.MAIN ? 'OPPONENT THINKING...' : 'RESOLVING...'}
+                                    {state.phase === Phase.MAIN ? t('ui.opponentThinking') : t('ui.resolving')}
                                 </div>
                             )}
                         </div>
