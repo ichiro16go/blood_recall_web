@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Jinki } from '../types/type';
+import type { Jinki, JinkiStats } from '../types/type';
 
 interface JinkiCardProps {
   jinki: Jinki;
@@ -9,6 +9,7 @@ interface JinkiCardProps {
 }
 
 const JinkiCard: React.FC<JinkiCardProps> = ({ jinki, isEnemy, onSelfInflict, canSelfInflict }) => {
+    const currentStatus:JinkiStats = jinki.isAwakened ? jinki.awakened : jinki.normal;
   return (
     <div className={`
       relative w-32 h-48 rounded-xl border-4 transition-all duration-500 flex flex-col overflow-hidden shadow-2xl
@@ -37,15 +38,15 @@ const JinkiCard: React.FC<JinkiCardProps> = ({ jinki, isEnemy, onSelfInflict, ca
             <div className="space-y-1 text-[10px]">
                 <div className="flex justify-between bg-black/30 px-1 rounded">
                     <span>Hand Size:</span>
-                    <span className="font-mono text-yellow-400">{jinki.handSize}</span>
+                    <span className="font-mono text-yellow-400">{currentStatus.handSize}</span>
                 </div>
                 <div className="flex justify-between bg-black/30 px-1 rounded">
                     <span>Self-Inflict:</span>
-                    <span className="font-mono text-red-500">{jinki.selfInfliction}</span>
+                    <span className="font-mono text-red-500">{currentStatus.selfInfliction}</span>
                 </div>
                 <div className="flex justify-between bg-black/30 px-1 rounded">
                     <span>Succession:</span>
-                    <span className="font-mono text-blue-400">{jinki.bloodSuccession}</span>
+                    <span className="font-mono text-blue-400">{currentStatus.bloodSuccession}</span>
                 </div>
             </div>
 

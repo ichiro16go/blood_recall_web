@@ -70,22 +70,7 @@ export const MOCK_CARDS: Card[] = [
   }
 ];
 
-export const INITIAL_JINKI: Jinki = {
-  name: 'Crimson Valkyrie',
-  handSize: 5,
-  era: 100,
-  selfInfliction: 3,
-  bloodSuccession: 2,
-  isAwakened: false,
-  isTapped: false
-};
 
-export const AWAKENED_JINKI_MODIFIERS = {
-  handSize: 7,
-  selfInfliction: 5,
-  bloodSuccession: 3,
-  name: 'Crimson Valkyrie (Awakened)'
-};
 
 export const STARTING_DECK_SIZE = 10;
 export const INITIAL_LIFE_COUNT = 20;
