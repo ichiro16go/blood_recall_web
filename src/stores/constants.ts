@@ -70,6 +70,16 @@ export const MOCK_CARDS: Card[] = [
   }
 ];
 
+export const MADNESS_CARD: Card = {
+    id: 'c_madness',
+    name: '発狂', 
+    type: CardType.CALAMITY,
+    attack: 0,
+    cost: 0,
+    level: 0,
+    description: '意味をなさず、手札を圧迫する。捨ててもデッキに戻る'
+};
+
 
 
 export const STARTING_DECK_SIZE = 10;
