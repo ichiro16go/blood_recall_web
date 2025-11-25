@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Card } from '../types/type';
 import { CardType } from '../types/type';
+import { useTranslation } from 'react-i18next';
 
 interface CardProps {
   card: Card;
@@ -11,6 +12,7 @@ interface CardProps {
 }
 
 const CardComponent: React.FC<CardProps> = ({ card, onClick, isPlayable = false, size = 'md', className = '' }) => {
+  const { t } = useTranslation(); 
   
   const sizeClasses = {
     sm: 'w-16 h-24 text-[0.6rem]',
