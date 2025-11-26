@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useReducer, useCallback } from 'react';
-import type { Card,  GameState, Player,Jinki,JinkiStats } from './types/type';
+'use client'
+import React, { useState, useEffect, useReducer } from 'react';
+import type {  GameState, Player,Jinki,JinkiStats } from './types/type';
 import { CardType,Phase } from './types/type';
 import { MOCK_CARDS,  STARTING_DECK_SIZE, INITIAL_LIFE_COUNT, LIFE_THRESHOLD_AWAKEN, generateId,} from './stores/constants';
 import CardComponent from './components/CardComponent';
@@ -438,12 +439,11 @@ const App: React.FC = () => {
   const humanCurrentStats = getJinkiStatus(human.jinki);
 
   return (
-    <div className="w-full h-screen bg-black overflow-hidden flex items-center justify-center">
+    <div className="w-screen h-screen bg-black overflow-hidden flex items-center justify-center">
       <TutorialModal isOpen={isTutorialOpen} onClose={() => setIsTutorialOpen(false)} />
       
       <div 
         style={{ 
-            width: targetWidth, 
             height: TARGET_HEIGHT,
             transform: `scale(${scale})`,
             transformOrigin: 'center center'
@@ -452,7 +452,7 @@ const App: React.FC = () => {
       >
       
       {/* --- Header / Status Bar --- */}
-      <div className="flex justify-between items-center px-6 py-4 bg-black/60 border-b border-white/10 h-16 shrink-0 relative z-50">
+      <div className="flex justify-between items-center  bg-black/60 border-b border-white/10 h-16 shrink-0 relative z-50">
         <h1 className="text-red-600 font-cinzel font-bold text-3xl tracking-widest drop-shadow-md">BLOOD RECALL</h1>
         
         <div className="flex gap-4 text-xl text-gray-300 font-mono">
@@ -497,7 +497,7 @@ const App: React.FC = () => {
                         <LifeArea lifeCount={cpu.life.length} playerId={cpu.id} isEnemy={true} />
                         <div className="mt-2 text-sm text-gray-400 font-mono">Hand: {cpu.hand.length} | Atk: {cpu.totalAttack}</div>
                          <div className="flex -space-x-12 mt-2 opacity-70">
-                            {cpu.hand.map((c, i) => (
+                            {cpu.hand.map((_, i) => (
                                 <div key={i} className="w-16 h-24 bg-red-950 border border-gray-600 rounded shadow-md"></div>
                             ))}
                         </div>
@@ -622,7 +622,7 @@ const App: React.FC = () => {
                         {/* Hand */}
                         <div className="relative h-48 w-96">
                             <div className="absolute bottom-[-20px] right-0 flex -space-x-16 hover:-space-x-4 transition-all duration-500 p-4">
-                                {human.hand.map((card, i) => (
+                                {human.hand.map((card) => (
                                     <div key={card.id} className="transform hover:-translate-y-12 transition-transform duration-300 z-10 hover:z-50 cursor-pointer">
                                         <CardComponent 
                                             card={card} 

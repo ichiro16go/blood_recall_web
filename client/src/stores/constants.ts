@@ -1,4 +1,4 @@
-import type { Card, Jinki } from '../types/type';
+import type { Card} from '../types/type';
 import { CardType } from '../types/type';
 
 // Helper to generate IDs
