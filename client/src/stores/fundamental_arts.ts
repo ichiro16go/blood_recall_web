@@ -1,0 +1,1 @@
+// 修正：CPUの血継回数チェックもgetJinkiStatsを使用

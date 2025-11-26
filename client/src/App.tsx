@@ -1,16 +1,26 @@
-import React, { useState, useEffect, useReducer, } from 'react';
-import type {  GameState, Player } from './types/type';
-import { CardType, Phase } from './types/type';
-import { MOCK_CARDS, INITIAL_JINKI, STARTING_DECK_SIZE, INITIAL_LIFE_COUNT, LIFE_THRESHOLD_AWAKEN, generateId, AWAKENED_JINKI_MODIFIERS } from './stores/constants';
+import React, { useState, useEffect, useReducer, useCallback } from 'react';
+import type { Card,  GameState, Player,Jinki,JinkiStats } from './types/type';
+import { CardType,Phase } from './types/type';
+import { MOCK_CARDS,  STARTING_DECK_SIZE, INITIAL_LIFE_COUNT, LIFE_THRESHOLD_AWAKEN, generateId,} from './stores/constants';
 import CardComponent from './components/CardComponent';
+import { ALL_JINKI_DATA } from './stores/jinkis';
 import LifeArea from './components/LifeArea';
 import JinkiCard from './components/JinkiCard';
 import BloodPool from './components/BloodPool';
+import TutorialModal from './components/TutorialModal';
 
+// --- Helper Functions ---
 
-const shuffle = <T,>(array: T[]) => [...array].sort(() => Math.random() - 0.5);
+//シャッフル
+const shuffle = (array: any[]) => [...array].sort(() => Math.random() - 0.5);
 
-const createPlayer = (id: string, name: string, isCpu: boolean): Player => {
+//　神器のステータス取得
+const getJinkiStatus = (jinki: Jinki): JinkiStats => {
+  return jinki.isAwakened ? jinki.awakened : jinki.normal;
+};
+
+// プレイヤー設定
+const createPlayer = (id: string, name: string, isCpu: boolean,jinki:Jinki): Player => {
   const startingDeck = Array.from({ length: STARTING_DECK_SIZE }).map((_, i) => {
     const template = i < 6 ? MOCK_CARDS[0] : MOCK_CARDS[1]; // 6 Attacks, 4 Blood
     return { ...template, id: generateId() };
@@ -25,7 +35,7 @@ const createPlayer = (id: string, name: string, isCpu: boolean): Player => {
     hand: [],
     field: [],
     discard: startingDeck, // Start in discard for logic simplicity (draw happens in setup)
-    jinki: { ...INITIAL_JINKI },
+    jinki: { ...jinki ,isTapped: false, isAwakened: false},
     actionsTaken: 0,
     hasPassed: false,
     totalAttack: 0,
@@ -47,19 +57,24 @@ type Action =
 
 const gameReducer = (state: GameState, action: Action): GameState => {
   switch (action.type) {
+    //ゲーム準備
     case 'INIT_GAME': {
-      const p1 = createPlayer('p1', 'Player', false);
-      const p2 = createPlayer('cpu', 'Rival', true);
+      // 神器をランダムに選択
+      const shuffledJinkis = shuffle(ALL_JINKI_DATA);
+      const p1Jinki = shuffledJinkis[0];
+      const p2Jinki = shuffledJinkis[1];
+      const p1 = createPlayer('p1', 'Player', false,p1Jinki);
+      const p2 = createPlayer('cpu', 'Rival', true,p2Jinki);
       
-      // Draw initial hands
+      // 初手ドロー
       [p1, p2].forEach(p => {
-        const drawCount = p.jinki.handSize;
+        const drawCount = getJinkiStatus(p.jinki).handSize;
         const drawn = p.discard.slice(0, drawCount);
         p.hand = drawn;
         p.discard = p.discard.slice(drawCount);
       });
 
-      // Init Market
+      // 購買エリア初期化
       const marketDeck = Array.from({ length: 30 }).map(() => {
         const template = MOCK_CARDS[Math.floor(Math.random() * (MOCK_CARDS.length - 2)) + 2];
         return { ...template, id: generateId() };
@@ -79,7 +94,7 @@ const gameReducer = (state: GameState, action: Action): GameState => {
         winnerId: null,
       };
     }
-
+    // メインフェイズ
     case 'PLAY_CARD': {
       const pIdx = state.players.findIndex(p => p.id === action.playerId);
       if (pIdx === -1) return state;
@@ -110,14 +125,14 @@ const gameReducer = (state: GameState, action: Action): GameState => {
         log: [...state.log, `${player.name} played ${card.name}.`],
       };
     }
-
+    // 自傷
     case 'SELF_INFLICT': {
       const pIdx = state.players.findIndex(p => p.id === action.playerId);
       const player = { ...state.players[pIdx] };
 
       if (player.jinki.isTapped || player.life.length === 0) return state;
 
-      const damage = player.jinki.selfInfliction;
+      const damage = getJinkiStatus(player.jinki).selfInfliction;
       const taken = Math.min(damage, player.life.length);
       
       // Move Life -> Blood Pool
@@ -136,12 +151,12 @@ const gameReducer = (state: GameState, action: Action): GameState => {
         log: [...state.log, `${player.name} self-inflicted ${taken} damage for Blood.`],
       };
     }
-
+    // 購買フェイズ
     case 'BUY_CARD': {
       const pIdx = state.players.findIndex(p => p.id === action.playerId);
       const player = { ...state.players[pIdx] };
       
-      if (player.actionsTaken >= player.jinki.bloodSuccession) return state;
+      if (player.actionsTaken >= getJinkiStatus(player.jinki).bloodSuccession) return state;
 
       const cardToBuy = state.market[action.cardIndex];
       if (!cardToBuy || player.bloodPool.length < cardToBuy.cost) return state;
@@ -174,7 +189,7 @@ const gameReducer = (state: GameState, action: Action): GameState => {
         log: [...state.log, `${player.name} bought ${cardToBuy.name}.`],
       };
     }
-
+//    パスフェイズ
     case 'PASS_PHASE': {
         const pIdx = state.players.findIndex(p => p.id === action.playerId);
         const newPlayers = [...state.players];
@@ -200,7 +215,7 @@ const gameReducer = (state: GameState, action: Action): GameState => {
             };
         }
     }
-
+    // バトルフェイズの解決
     case 'RESOLVE_BATTLE': {
         let newPlayers = state.players.map(p => {
             // Calc Attack
@@ -238,12 +253,12 @@ const gameReducer = (state: GameState, action: Action): GameState => {
             // If draw, first player priority usually, but let's keep it null for simplicity
         }
 
-        // Check Awakening
+        // 神器の覚醒処理
         newPlayers = newPlayers.map(p => {
             if (!p.jinki.isAwakened && p.life.length <= LIFE_THRESHOLD_AWAKEN) {
                 return {
                     ...p,
-                    jinki: { ...p.jinki, ...AWAKENED_JINKI_MODIFIERS, isAwakened: true }
+                    jinki: { ...p.jinki, isAwakened: true }
                 };
             }
             return p;
@@ -263,7 +278,7 @@ const gameReducer = (state: GameState, action: Action): GameState => {
             firstPlayerIndex: winnerIdx !== -1 ? winnerIdx : state.firstPlayerIndex // Winner gets initiative
         };
     }
-
+    // クリーンアップフェイズ(ターン終了フェイズ)
     case 'CLEANUP': {
         const newPlayers = state.players.map(p => {
             // Field -> Discard
@@ -276,8 +291,8 @@ const gameReducer = (state: GameState, action: Action): GameState => {
             newHand = [];
 
             // Reshuffle if needed (basic check)
-            const deckSource = newDiscard; // In this simple engine, discard IS the deck source for next turn essentially since we don't track strict deck array separate
-            const drawCount = p.jinki.handSize;
+            let deckSource = newDiscard; // In this simple engine, discard IS the deck source for next turn essentially since we don't track strict deck array separate
+            const drawCount = getJinkiStatus(p.jinki).handSize;
             
             // To simulate drawing from a deck:
             const shuffled = shuffle(deckSource);
@@ -315,6 +330,16 @@ const gameReducer = (state: GameState, action: Action): GameState => {
 const App: React.FC = () => {
   const [state, dispatch] = useReducer(gameReducer, {} as GameState);
   const [cpuThinking, setCpuThinking] = useState(false);
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+
+  // --- Scaling & Resize Logic ---
+  const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+
+  useEffect(() => {
+    const handleResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     dispatch({ type: 'INIT_GAME' });
@@ -335,15 +360,15 @@ const App: React.FC = () => {
     if (!activePlayer || !activePlayer.isCpu || state.phase !== Phase.MAIN || state.winnerId) return;
 
     if (cpuThinking) return;
+    setCpuThinking(true);
 
     const think = async () => {
-        // Mark CPU as thinking inside the async callback to avoid synchronous setState in effect
-        setCpuThinking(true);
-
         // Delay for realism
         await new Promise(r => setTimeout(r, 1500));
+//CPUの血継回数チェックもgetJinkiStatsを使用
+        const currentCpuStats = getJinkiStatus(activePlayer.jinki);
 
-        // 1. Self Inflict if untapped
+        // 1. Self Inflict if untappe
         if (!activePlayer.jinki.isTapped) {
             dispatch({ type: 'SELF_INFLICT', playerId: activePlayer.id });
             setCpuThinking(false);
@@ -359,7 +384,7 @@ const App: React.FC = () => {
         }
 
         // 3. Buy Card if actions avail and can afford
-        if (activePlayer.actionsTaken < activePlayer.jinki.bloodSuccession) {
+        if (activePlayer.actionsTaken < currentCpuStats.bloodSuccession) {
             const affordableIndex = state.market.findIndex(c => c.cost <= activePlayer.bloodPool.length);
             if (affordableIndex !== -1) {
                 dispatch({ type: 'BUY_CARD', playerId: activePlayer.id, cardIndex: affordableIndex });
@@ -386,7 +411,7 @@ const App: React.FC = () => {
           return () => clearTimeout(timer);
       }
       if (state.phase === Phase.CLEANUP) {
-           const timer = setTimeout(() => {
+          const timer = setTimeout(() => {
               dispatch({ type: 'CLEANUP' });
           }, 2000);
           return () => clearTimeout(timer);
@@ -400,31 +425,64 @@ const App: React.FC = () => {
   const cpu = state.players.find(p => p.isCpu)!;
   const isHumanTurn = state.activePlayerIndex === state.players.findIndex(p => p.id === human.id) && state.phase === Phase.MAIN;
 
+  // 画面サイズの調整
+  const TARGET_HEIGHT = 1080;
+  const aspectRatio = windowSize.width / windowSize.height;
+  const targetWidth = Math.max(1920, Math.min(2400, TARGET_HEIGHT * aspectRatio));
+  
+  const scale = Math.min(
+      windowSize.width / targetWidth,
+      windowSize.height / TARGET_HEIGHT
+  );
+
+  const humanCurrentStats = getJinkiStatus(human.jinki);
+
   return (
-    <div className="flex flex-col h-screen bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-900 via-[#0f0f12] to-black overflow-hidden">
+    <div className="w-full h-screen bg-black overflow-hidden flex items-center justify-center">
+      <TutorialModal isOpen={isTutorialOpen} onClose={() => setIsTutorialOpen(false)} />
+      
+      <div 
+        style={{ 
+            width: targetWidth, 
+            height: TARGET_HEIGHT,
+            transform: `scale(${scale})`,
+            transformOrigin: 'center center'
+        }}
+        className="relative flex flex-col bg-[radial-gradient(ellipse_at_center,var(--tw-gradient-stops))] from-gray-900 via-[#0f0f12] to-black shadow-2xl"
+      >
       
       {/* --- Header / Status Bar --- */}
-      <div className="flex justify-between items-center px-4 py-2 bg-black/60 border-b border-white/10 h-12 shrink-0">
-        <h1 className="text-red-600 font-cinzel font-bold text-xl tracking-widest">BLOOD RECALL</h1>
-        <div className="flex gap-4 text-sm text-gray-300 font-mono">
+      <div className="flex justify-between items-center px-6 py-4 bg-black/60 border-b border-white/10 h-16 shrink-0 relative z-50">
+        <h1 className="text-red-600 font-cinzel font-bold text-3xl tracking-widest drop-shadow-md">BLOOD RECALL</h1>
+        
+        <div className="flex gap-4 text-xl text-gray-300 font-mono">
             <span className={state.phase === Phase.MAIN ? 'text-white font-bold' : 'opacity-50'}>MAIN</span>
             <span>&gt;</span>
             <span className={state.phase === Phase.BATTLE ? 'text-red-500 font-bold animate-pulse' : 'opacity-50'}>BATTLE</span>
             <span>&gt;</span>
             <span className={state.phase === Phase.CLEANUP ? 'text-blue-400 font-bold' : 'opacity-50'}>CLEANUP</span>
         </div>
-        <div className="text-xs text-gray-500">Turn {state.turnCount}</div>
+
+        <div className="flex items-center gap-4">
+            <button 
+                onClick={() => setIsTutorialOpen(true)}
+                className="px-4 py-1 border border-gray-600 rounded hover:bg-white/10 text-gray-300 text-sm"
+            >
+                HOW TO PLAY
+            </button>
+            <div className="text-sm text-gray-500 font-mono">Turn {state.turnCount}</div>
+        </div>
       </div>
 
       {/* --- Game Area --- */}
       <div className="flex-grow relative flex flex-col lg:flex-row overflow-hidden">
         
         {/* --- Left: Game Log (Desktop) --- */}
-        <div className="hidden lg:block w-64 bg-black/40 border-r border-white/10 p-4 overflow-y-auto shrink-0 font-mono text-xs">
-            <h3 className="text-gray-500 mb-2 border-b border-gray-700">BATTLE LOG</h3>
-            <div ref={logRef} className="space-y-1 h-full overflow-y-auto pb-20">
+        <div className="w-80 bg-black/40 border-r border-white/10 p-6 overflow-y-auto shrink-0 font-mono text-sm">
+            <h3 className="text-gray-500 mb-4 border-b border-gray-700 pb-2">BATTLE LOG</h3>
+            <div ref={logRef} className="space-y-2 h-full overflow-y-auto pb-20">
                 {state.log.map((l, i) => (
-                    <div key={i} className="text-gray-300 break-words"><span className="text-red-900 mr-1">➤</span>{l}</div>
+                    <div key={i} className="text-gray-300 break-words leading-tight"><span className="text-red-900 mr-2">➤</span>{l}</div>
                 ))}
             </div>
         </div>
@@ -433,28 +491,27 @@ const App: React.FC = () => {
         <div className="flex-grow flex flex-col relative">
             
             {/* CPU Area (Top) */}
-            <div className="flex-1 flex items-center justify-center bg-gradient-to-b from-red-950/20 to-transparent p-2">
-                <div className="flex gap-8 items-center">
+            <div className="flex-1 flex items-center justify-center bg-gradient-to-b from-red-950/20 to-transparent p-4">
+                <div className="flex gap-12 items-center scale-90">
                     <div className="flex flex-col items-center">
                         <LifeArea lifeCount={cpu.life.length} playerId={cpu.id} isEnemy={true} />
-                        <div className="mt-2 text-xs text-gray-400">Hand: {cpu.hand.length} | Atk: {cpu.totalAttack}</div>
-                        {/* CPU Hand (Hidden) */}
-                         <div className="flex -space-x-12 mt-1 opacity-70">
-                            {cpu.hand.map((_, i) => (
-                                <div key={i} className="w-12 h-16 bg-red-950 border border-gray-600 rounded"></div>
+                        <div className="mt-2 text-sm text-gray-400 font-mono">Hand: {cpu.hand.length} | Atk: {cpu.totalAttack}</div>
+                         <div className="flex -space-x-12 mt-2 opacity-70">
+                            {cpu.hand.map((c, i) => (
+                                <div key={i} className="w-16 h-24 bg-red-950 border border-gray-600 rounded shadow-md"></div>
                             ))}
                         </div>
                     </div>
 
                     {/* CPU Field */}
-                    <div className="w-64 h-32 border border-dashed border-white/10 rounded bg-black/20 flex items-center justify-center flex-wrap gap-2 p-2 overflow-hidden">
-                         {cpu.field.length === 0 && <span className="text-xs text-gray-600">Empty Field</span>}
+                    <div className="w-96 h-40 border border-dashed border-white/10 rounded-xl bg-black/20 flex items-center justify-center flex-wrap gap-2 p-2 overflow-hidden shadow-inner">
+                         {cpu.field.length === 0 && <span className="text-sm text-gray-600">Empty Field</span>}
                          {cpu.field.map((card) => (
                              <CardComponent key={card.id} card={card} size="sm" />
                          ))}
                     </div>
 
-                    <div className="flex flex-col items-center gap-2">
+                    <div className="flex flex-col items-center gap-4">
                         <JinkiCard jinki={cpu.jinki} isEnemy={true} />
                         <BloodPool amount={cpu.bloodPool.length} />
                     </div>
@@ -462,53 +519,57 @@ const App: React.FC = () => {
             </div>
 
             {/* Market / Center Strip */}
-            <div className="h-48 bg-black/30 border-y border-white/10 flex items-center justify-center relative">
-                <div className="absolute left-2 top-2 text-xs text-yellow-600 font-cinzel tracking-widest">COVENANT AREA (MARKET)</div>
-                <div className="flex gap-3 px-4 overflow-x-auto max-w-full items-center h-full scrollbar-hide">
-                    {state.market.map((card, i) => (
-                        <CardComponent 
-                            key={card.id} 
-                            card={card} 
-                            className={isHumanTurn && human.bloodPool.length >= card.cost && human.actionsTaken < human.jinki.bloodSuccession ? 'hover:scale-110 cursor-pointer ring-2 ring-yellow-500' : 'opacity-70'}
-                            onClick={() => {
-                                if (isHumanTurn && human.bloodPool.length >= card.cost) {
-                                    dispatch({ type: 'BUY_CARD', playerId: human.id, cardIndex: i });
-                                }
-                            }}
-                        />
-                    ))}
-                     {state.market.length === 0 && <div className="text-gray-500 text-sm italic">Market Empty</div>}
+            <div className="h-64 bg-black/40 border-y border-white/10 flex items-center justify-center relative backdrop-blur-sm">
+                <div className="absolute left-4 top-4 text-sm text-yellow-600 font-cinzel tracking-[0.2em] border-b border-yellow-600/30 pb-1">COVENANT AREA (MARKET)</div>
+                <div className="flex gap-6 px-12 overflow-x-auto max-w-full items-center h-full scrollbar-hide pt-4">
+                    {state.market.map((card, i) => {
+                         const canBuy = isHumanTurn && human.bloodPool.length >= card.cost && human.actionsTaken < humanCurrentStats.bloodSuccession;
+                         return (
+                            <CardComponent 
+                                key={card.id} 
+                                card={card} 
+                                isPlayable={canBuy}
+                                className={canBuy ? 'hover:scale-110 cursor-pointer ring-4 ring-yellow-500/50 shadow-[0_0_20px_rgba(234,179,8,0.3)]' : 'opacity-60 grayscale brightness-75'}
+                                onClick={() => {
+                                    if (canBuy) {
+                                        dispatch({ type: 'BUY_CARD', playerId: human.id, cardIndex: i });
+                                    }
+                                }}
+                            />
+                         );
+                    })}
+                     {state.market.length === 0 && <div className="text-gray-500 text-lg italic">Market Empty</div>}
                 </div>
                 
                 {/* Central Status Overlay */}
                 {state.phase === Phase.BATTLE && (
-                    <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50 backdrop-blur-sm">
-                        <div className="text-4xl font-cinzel font-bold text-red-500 animate-bounce">
+                    <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50 backdrop-blur-sm transition-opacity">
+                        <div className="text-6xl font-cinzel font-bold text-red-500 animate-bounce tracking-widest drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]">
                             BATTLE PHASE
                         </div>
                     </div>
                 )}
                  {state.winnerId && (
-                    <div className="absolute inset-0 bg-black/90 flex items-center justify-center z-50 flex-col">
-                        <div className="text-5xl font-cinzel font-bold text-yellow-500 mb-4">
+                    <div className="absolute inset-0 bg-black/90 flex items-center justify-center z-50 flex-col backdrop-blur-md">
+                        <div className="text-8xl font-cinzel font-bold text-yellow-500 mb-8 drop-shadow-[0_0_25px_rgba(234,179,8,0.8)]">
                             {state.winnerId === human.id ? 'VICTORY' : 'DEFEAT'}
                         </div>
                         <button 
                             onClick={() => window.location.reload()}
-                            className="px-6 py-2 bg-red-700 hover:bg-red-600 text-white font-bold rounded"
+                            className="px-12 py-4 bg-red-800 hover:bg-red-700 text-white font-cinzel font-bold text-xl rounded-lg shadow-xl border border-red-500 transition-all hover:scale-105"
                         >
-                            Play Again
+                            PLAY AGAIN
                         </button>
                     </div>
                 )}
             </div>
 
             {/* Player Area (Bottom) */}
-            <div className="flex-1 flex items-center justify-center bg-gradient-to-t from-blue-950/20 to-transparent p-2 pb-4">
-                 <div className="flex gap-8 items-end">
+            <div className="flex-1 flex items-center justify-center bg-gradient-to-t from-blue-950/20 to-transparent p-4 pb-8">
+                 <div className="flex gap-12 items-end">
                     
                     {/* Avatar & Blood */}
-                    <div className="flex flex-col items-center gap-2">
+                    <div className="flex flex-col items-center gap-4">
                         <BloodPool amount={human.bloodPool.length} />
                         <JinkiCard 
                             jinki={human.jinki} 
@@ -519,29 +580,35 @@ const App: React.FC = () => {
                     </div>
 
                     {/* Field & Controls */}
-                    <div className="flex flex-col gap-2">
-                        <div className="w-96 h-32 border border-dashed border-white/10 rounded bg-black/20 flex items-center justify-center flex-wrap gap-2 p-2 overflow-hidden">
-                            {human.field.length === 0 && <span className="text-xs text-gray-600">Play cards here</span>}
+                    <div className="flex flex-col gap-3 items-center">
+                        <div className="w-[500px] h-40 border-2 border-dashed border-white/20 rounded-xl bg-black/30 flex items-center justify-center flex-wrap gap-2 p-3 overflow-hidden shadow-lg">
+                            {human.field.length === 0 && <span className="text-gray-500 font-cinzel tracking-wider">PLAY CARDS HERE</span>}
                             {human.field.map((card) => (
                                 <CardComponent key={card.id} card={card} size="sm" />
                             ))}
                         </div>
 
-                        <div className="flex justify-between items-center bg-black/50 p-2 rounded">
-                            <div className="text-xs text-gray-400">
-                                Actions: {human.actionsTaken}/{human.jinki.bloodSuccession} <br/>
-                                Total Attack: <span className="text-red-400 font-bold">{human.field.reduce((a,c) => a+c.attack, 0)}</span>
+                        <div className="flex w-full justify-between items-center bg-gray-900/80 p-3 rounded-lg border border-gray-700">
+                            <div className="text-sm text-gray-300 font-mono leading-relaxed">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-blue-400">Succession:</span>
+                                    <span className="text-white font-bold">{human.actionsTaken}/{humanCurrentStats.bloodSuccession}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-red-400">Total Attack:</span>
+                                    <span className="text-2xl text-red-500 font-bold">{human.field.reduce((a,c) => a+c.attack, 0)}</span>
+                                </div>
                             </div>
                             
                             {isHumanTurn ? (
                                 <button 
                                     onClick={() => dispatch({ type: 'PASS_PHASE', playerId: human.id })}
-                                    className="px-6 py-2 bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white font-bold rounded text-sm shadow-lg active:translate-y-1"
+                                    className="px-8 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-500 hover:border-white text-white font-bold rounded shadow-lg active:scale-95 transition-all tracking-wider"
                                 >
                                     END MAIN PHASE
                                 </button>
                             ) : (
-                                <div className="text-yellow-500 text-sm animate-pulse font-bold">
+                                <div className="text-yellow-500 text-lg animate-pulse font-bold tracking-widest px-4">
                                     {state.phase === Phase.MAIN ? 'OPPONENT THINKING...' : 'RESOLVING...'}
                                 </div>
                             )}
@@ -549,34 +616,31 @@ const App: React.FC = () => {
                     </div>
 
                     {/* Life & Hand */}
-                    <div className="flex flex-col items-end gap-4">
+                    <div className="flex flex-col items-end gap-6">
                         <LifeArea lifeCount={human.life.length} playerId={human.id} isEnemy={false} />
                         
                         {/* Hand */}
-                        <div className="relative h-32 w-64">
-                             <div className="absolute bottom-0 right-0 flex -space-x-12 hover:-space-x-4 transition-all duration-300 p-2">
-                                {human.hand.map((card) => (
-                                    <div key={card.id} className="transform hover:-translate-y-6 transition-transform z-10 hover:z-50">
+                        <div className="relative h-48 w-96">
+                            <div className="absolute bottom-[-20px] right-0 flex -space-x-16 hover:-space-x-4 transition-all duration-500 p-4">
+                                {human.hand.map((card, i) => (
+                                    <div key={card.id} className="transform hover:-translate-y-12 transition-transform duration-300 z-10 hover:z-50 cursor-pointer">
                                         <CardComponent 
                                             card={card} 
                                             isPlayable={isHumanTurn}
                                             onClick={() => isHumanTurn && dispatch({ type: 'PLAY_CARD', playerId: human.id, cardId: card.id })}
+                                            className="shadow-2xl hover:shadow-red-500/30"
                                         />
                                     </div>
                                 ))}
-                             </div>
+                            </div>
                         </div>
                     </div>
 
-                 </div>
+                </div>
             </div>
         </div>
       </div>
-      
-      {/* Mobile Portrait Warning */}
-      <div className="lg:hidden fixed inset-0 pointer-events-none flex items-center justify-center z-[100] opacity-0">
-        {/* Ideally we'd show a rotate message here via media query, but relying on responsiveness for now */}
-      </div>
+    </div>
     </div>
   );
 };
